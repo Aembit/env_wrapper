@@ -11,7 +11,7 @@
 //! This crate introduces the [`RealEnvironment`](RealEnvironment)
 //! (a wrapper around the functions in [`std::env`](https://doc.rust-lang.org/std/env/index.html))
 //! and
-//! [`FakeEnvironment`](FakeEnvironment) structs, which share the
+//! [`FakeEnvironment`](FakeEnvironment) structs, which implement the
 //! [`Environment`](Environment) trait. Instead of using
 //! [`std::env`](https://doc.rust-lang.org/std/env/index.html) directly,
 //! use [`RealEnvironment`](RealEnvironment) with

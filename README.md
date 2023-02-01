@@ -13,7 +13,7 @@ so these problems cannot happen.
 This crate introduces the `RealEnvironment`
 (a wrapper around the functions in [`std::env`](https://doc.rust-lang.org/std/env/index.html))
 and
-`FakeEnvironment` structs, which share the
+`FakeEnvironment` structs, which implement the
 `Environment` trait. Instead of using
 [`std::env`](https://doc.rust-lang.org/std/env/index.html) directly,
 use `RealEnvironment` with
