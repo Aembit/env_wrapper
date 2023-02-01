@@ -1,4 +1,4 @@
-# Env Wrapper
+# env_wrapper
 
 A wrapper around the standard [`std::env`](https://doc.rust-lang.org/std/env/index.html)
 functions that allows for a test double to be injected during testing.
