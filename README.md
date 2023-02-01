@@ -10,13 +10,13 @@ The ideal solution is to have a private set of environment variables per test,
 so these problems cannot happen.
 
 # Approach
-This crate introduces the [`RealEnvironment`](RealEnvironment)
+This crate introduces the `RealEnvironment`
 (a wrapper around the functions in [`std::env`](https://doc.rust-lang.org/std/env/index.html))
 and
-[`FakeEnvironment`](FakeEnvironment) structs, which share the
-[`Environment`](Environment) trait. Instead of using
+`FakeEnvironment` structs, which share the
+`Environment` trait. Instead of using
 [`std::env`](https://doc.rust-lang.org/std/env/index.html) directly,
-use [`RealEnvironment`](RealEnvironment) with
+use `RealEnvironment` with
 [dependency injection](https://en.wikipedia.org/wiki/Dependency_injection)
 so each of your tests can have a private set of environment variables.
 
