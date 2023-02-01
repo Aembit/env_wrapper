@@ -52,7 +52,7 @@
 //!     fake_env.set_var(CONFIG_LOCATION_ENV_VAR_NAME, user_specified_location);
 //!     
 //!     // Act
-//!     // In test code, inject FakeEnvironment.
+//!     // In the test code, inject FakeEnvironment.
 //!     let location = get_config_location(fake_env);
 //!
 //!     // Assert

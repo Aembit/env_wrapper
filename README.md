@@ -54,7 +54,7 @@ fn when_the_user_has_set_the_config_location_env_var_then_use_that_location() {
     fake_env.set_var(CONFIG_LOCATION_ENV_VAR_NAME, user_specified_location);
     
     // Act
-    // In test code, inject FakeEnvironment.
+    // In the test code, inject FakeEnvironment.
     let location = get_config_location(fake_env);
 
     // Assert
