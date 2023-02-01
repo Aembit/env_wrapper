@@ -129,9 +129,6 @@ impl Environment for RealEnvironment {
 /// To make sure one test's environment state does not affect another, use a new
 /// instance of `FakeEnvironment` for each test.
 ///
-/// # Implementation Details
-/// Under the hood, a `FakeEnvironment` is just a
-///
 /// # Example
 /// ```rust
 /// # use env_wrapper::{Environment, FakeEnvironment};
