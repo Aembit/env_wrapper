@@ -126,8 +126,8 @@ impl Environment for RealEnvironment {
 /// A fake process environment, suitable for testing.
 ///
 /// # Notes
-/// To make sure one test's environment state does not affect another, a new
-/// instance of `FakeEnvironment` should be used per test.
+/// To make sure one test's environment state does not affect another, use a new
+/// instance of `FakeEnvironment` for each test.
 ///
 /// # Implementation Details
 /// Under the hood, a `FakeEnvironment` is just a
