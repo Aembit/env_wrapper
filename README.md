@@ -3,13 +3,13 @@
 A wrapper around the standard [`std::env`](https://doc.rust-lang.org/std/env/index.html)
 functions that allows for a test double to be injected during testing.
 
-# Motivation
+## Motivation
 Testing code that relies on the state of environment variables can be
 fragile, since the state may change between tests or be polluted by other tests.
 The ideal solution is to have a private set of environment variables per test,
 so these problems cannot happen.
 
-# Approach
+## Approach
 This crate introduces the `RealEnvironment`
 (a wrapper around the functions in [`std::env`](https://doc.rust-lang.org/std/env/index.html))
 and
@@ -20,7 +20,7 @@ use `RealEnvironment` with
 [dependency injection](https://en.wikipedia.org/wiki/Dependency_injection)
 so each of your tests can have a private set of environment variables.
 
-# Example
+## Example
 Scenario: An app looks for the presence of the `CONFIG_LOCATION` environment
 variable. If it isn't set, it uses a default location.
 
