@@ -1,8 +1,18 @@
 [package]
 name = "env_wrapper"
+authors = ["Will-Low <26700668+Will-Low@users.noreply.github.com>"]
 version = "0.1.0"
 edition = "2021"
+description = "A wrapper around std::env to facilitate testing"
+readme = "README.md"
+homepage = "https://aembit.io/"
+repository = "https://github.com/Aembit/env_wrapper/"
 license = "MIT OR Apache-2.0"
+keywords = ["test", "dependency-injection", "environment", "variables", "fake"]
+categories = ["development-tools", "development-tools::testing", "config", "os"]
+
+[badges]
+maintenance = { status = "passively-maintained"}
 
 [dependencies]
 
