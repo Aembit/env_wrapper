@@ -286,7 +286,7 @@ mod tests {
             let key = random_upper();
 
             // Act
-            let result = env.var_os(&key);
+            let result = env.var_os(key);
 
             // Assert
             assert!(result.is_none());
