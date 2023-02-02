@@ -275,16 +275,10 @@ impl Environment for FakeEnvironment {
 // implementations. Both are being tested to enforce behavioral parity.
 #[cfg(test)]
 mod tests {
-
-    #[cfg(target_family = "unix")]
-    use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_family = "wasm")]
-    use std::os::wasi::ffi::OsStrExt;
-    #[cfg(target_family = "windows")]
-    use std::os::windows::ffi::OsStrExt;
     use std::{
         env::VarError,
         ffi::{OsStr, OsString},
+        os::unix::ffi::OsStrExt,
     };
 
     use crate::{test_helpers::random_upper, Environment, FakeEnvironment, RealEnvironment};
