@@ -273,10 +273,7 @@ mod tests {
             let result = env.var(&key);
 
             // Assert
-            assert!(match result {
-                Err(VarError::NotUnicode(_)) => true,
-                _ => false,
-            });
+            assert!(matches!(result, Err(VarError::NotUnicode(_))));
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
