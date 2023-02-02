@@ -86,6 +86,9 @@ pub trait Environment {
     /// Get an environment variable. This does not check for valid UTF-8.
     /// If a valid UTF-8 check is needed, use `var` instead.
     fn var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString>;
+
+    /// Remove an environment variable from the current process environment.
+    fn remove_var(&mut self, key: impl AsRef<OsStr>);
 }
 
 /// The process's environment. Wraps the standard
@@ -94,7 +97,7 @@ pub trait Environment {
 /// When testing, [`FakeEnvironment`](FakeEnvironment) should likely be used instead.
 ///
 /// # Note
-/// Different instances of the struct all reference the same underlying process
+/// Different instances of the struct all reference the _same_ underlying process
 /// environment.
 ///
 /// # Example
@@ -110,16 +113,87 @@ pub trait Environment {
 pub struct RealEnvironment;
 
 impl Environment for RealEnvironment {
+    /// From [`std::env::set_var`](https://doc.rust-lang.org/std/env/fn.set_var.html):
+    /// > Sets the environment variable `key` to the value `value` for the currently running
+    /// > process.
+    /// >
+    /// > Note that while concurrent access to environment variables is safe in Rust,
+    /// > some platforms only expose inherently unsafe non-threadsafe APIs for
+    /// > inspecting the environment. As a result, extra care needs to be taken when
+    /// > auditing calls to unsafe external FFI functions to ensure that any external
+    /// > environment accesses are properly synchronized with accesses in Rust.
+    /// >
+    /// > Discussion of this unsafety on Unix may be found in:
+    /// >
+    /// >  - [Austin Group Bugzilla](https://austingroupbugs.net/view.php?id=188)
+    /// >  - [GNU C library Bugzilla](https://sourceware.org/bugzilla/show_bug.cgi?id=15607#c2)
+    /// >
+    /// > # Panics
+    /// >
+    /// > This function may panic if `key` is empty, contains an ASCII equals sign `'='`
+    /// > or the NUL character `'\0'`, or when `value` contains the NUL character.
     fn set_var(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
         env::set_var(key, value)
     }
 
+    /// From [`std::env::var`](https://doc.rust-lang.org/std/env/fn.var.html):
+    /// > Fetches the environment variable `key` from the current process.
+    /// >
+    /// > # Errors
+    /// >
+    /// > This function will return an error if the environment variable isn't set.
+    /// >
+    /// > This function may return an error if the environment variable's name contains
+    /// > the equal sign character (`=`) or the NUL character.
+    /// >
+    /// > This function will return an error if the environment variable's value is
+    /// > not valid Unicode. If this is not desired, consider using [`var_os`].
     fn var(&self, key: impl AsRef<OsStr>) -> Result<String, VarError> {
         env::var(key)
     }
 
+    /// From [`std::env::var_os`](https://doc.rust-lang.org/std/env/fn.var_os.html):
+    /// > Fetches the environment variable `key` from the current process, returning
+    /// > [`None`] if the variable isn't set or there's another error.
+    /// >
+    /// > Note that the method will not check if the environment variable
+    /// > is valid Unicode. If you want to have an error on invalid UTF-8,
+    /// > use the [`var`] function instead.
+    /// >
+    /// > # Errors
+    /// >
+    /// > This function returns an error if the environment variable isn't set.
+    /// >
+    /// > This function may return an error if the environment variable's name contains
+    /// > the equal sign character (`=`) or the NUL character.
+    /// >
+    /// > This function may return an error if the environment variable's value contains
+    /// > the NUL character.
     fn var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
         env::var_os(key)
+    }
+
+    /// From [`std::env::remove_var`](https://doc.rust-lang.org/std/env/fn.remove_var.html):
+    /// > Removes an environment variable from the environment of the currently running process.
+    /// >
+    /// > Note that while concurrent access to environment variables is safe in Rust,
+    /// > some platforms only expose inherently unsafe non-threadsafe APIs for
+    /// > inspecting the environment. As a result extra care needs to be taken when
+    /// > auditing calls to unsafe external FFI functions to ensure that any external
+    /// > environment accesses are properly synchronized with accesses in Rust.
+    /// >
+    /// > Discussion of this unsafety on Unix may be found in:
+    /// >
+    /// >  - [Austin Group Bugzilla](https://austingroupbugs.net/view.php?id=188)
+    /// >  - [GNU C library Bugzilla](https://sourceware.org/bugzilla/show_bug.cgi?id=15607#c2)
+    /// >
+    /// > # Panics
+    /// >
+    /// > This function may panic if `key` is empty, contains an ASCII equals sign
+    /// > `'='` or the NUL character `'\0'`, or when the value contains the NUL
+    /// > character.
+    fn remove_var(&mut self, key: impl AsRef<OsStr>) {
+        env::remove_var(key)
     }
 }
 
@@ -190,6 +264,10 @@ impl Environment for FakeEnvironment {
 
     fn var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
         self.env_vars.get(key.as_ref()).cloned()
+    }
+
+    fn remove_var(&mut self, key: impl AsRef<OsStr>) {
+        self.env_vars.remove(key.as_ref());
     }
 }
 
@@ -328,6 +406,41 @@ mod tests {
             // Assert
             assert_eq!(env.var(&key).unwrap(), val_2);
         }
+        test(RealEnvironment);
+        test(FakeEnvironment::new());
+    }
+
+    #[test]
+    fn given_an_existing_environment_variable_when_removing_the_same_environment_variable_then_the_variable_no_longer_exists(
+    ) {
+        fn test(mut env: impl Environment) {
+            // Arrange
+            let key = random_upper();
+            let value = random_upper();
+            env.set_var(&key, &value);
+
+            // Act
+            env.remove_var(&key);
+
+            // Assert
+            assert_eq!(env.var(&key).unwrap_err(), VarError::NotPresent);
+        }
+        test(RealEnvironment);
+        test(FakeEnvironment::new());
+    }
+
+    #[test]
+    fn when_removing_a_nonexistent_environment_variable_then_do_not_panic() {
+        fn test(mut env: impl Environment) {
+            // Arrange
+            let key = random_upper();
+
+            // Act
+            env.remove_var(&key);
+
+            // Assert - no assertion
+        }
+
         test(RealEnvironment);
         test(FakeEnvironment::new());
     }
