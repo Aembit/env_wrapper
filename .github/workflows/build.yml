@@ -5,34 +5,13 @@ on:
     branches:
       - "main"
 
-env:
-  RUST_TOOLCHAIN: 1.67.0
-
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+  build-linux:
+    uses: ./.github/workflows/build-common.yml
+    with:
+      runs-on: '["ubuntu-latest"]'
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
-
-      - name: Format
-        run: cargo fmt -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Audit
-        run: |
-          cargo install cargo-audit \
-          && cargo audit
-
-      - name: Test
-        run: cargo test
-
-      - name: Build
-        run: cargo build
+  build-windows:
+    uses: ./.github/workflows/build-common.yml
+    with:
+      runs-on: '["windows-latest"]'
