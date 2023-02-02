@@ -313,4 +313,24 @@ mod tests {
         test(RealEnvironment);
         test(FakeEnvironment::new());
     }
+
+    #[test]
+    fn given_an_existing_environment_variable_when_setting_the_same_environment_variable_then_the_value_is_overwritten(
+    ) {
+        fn test(mut env: impl Environment) {
+            // Arrange
+            let key = random_upper();
+            let val_1 = random_upper();
+            let val_2 = random_upper();
+            env.set_var(&key, &val_1);
+
+            // Act
+            env.set_var(&key, &val_2);
+
+            // Assert
+            assert_eq!(env.var(&key).unwrap(), val_2);
+        }
+        test(RealEnvironment);
+        test(FakeEnvironment::new());
+    }
 }
