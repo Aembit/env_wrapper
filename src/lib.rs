@@ -193,9 +193,10 @@ impl Environment for FakeEnvironment {
     }
 }
 
+// These tests represent behavior that should be shared by fake and real
+// implementations. Both are being tested to enforce behavioral parity.
 #[cfg(test)]
 mod tests {
-    //! These tests represent behavior that should be shared by fake and real implementations.
 
     use std::{
         env::VarError,
