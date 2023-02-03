@@ -10,8 +10,3 @@ jobs:
     uses: ./.github/workflows/build-common.yml
     with:
       runs-on: '["ubuntu-latest"]'
-
-  build-windows:
-    uses: ./.github/workflows/build-common.yml
-    with:
-      runs-on: '["windows-latest"]'
