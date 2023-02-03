@@ -5,6 +5,10 @@
 A wrapper around the standard [`std::env`](https://doc.rust-lang.org/std/env/index.html)
 functions that allows for a test double to be injected during testing.
 
+## Limitations
+
+At this time, this crate only works for Unix-like systems.
+
 ## Motivation
 
 Testing code that relies on the state of environment variables can be
