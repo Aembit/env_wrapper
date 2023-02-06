@@ -89,4 +89,4 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Code of Conduct
-All behavior is govered by the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct).
+All behavior is governed by the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct).
