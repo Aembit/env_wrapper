@@ -1,7 +1,7 @@
 [package]
 name = "env_wrapper"
 authors = ["Will-Low <26700668+Will-Low@users.noreply.github.com>"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A wrapper around std::env to facilitate testing"
 readme = "README.md"
