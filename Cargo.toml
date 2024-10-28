@@ -10,6 +10,10 @@ repository = "https://github.com/Aembit/env_wrapper/"
 license = "MIT OR Apache-2.0"
 keywords = ["test", "dependency-injection", "environment", "variables", "fake"]
 categories = ["development-tools", "development-tools::testing", "config", "os"]
+exclude = [
+    ".github/*",
+    ".gitignore"
+]
 
 [badges]
 maintenance = { status = "passively-maintained"}
@@ -18,3 +22,4 @@ maintenance = { status = "passively-maintained"}
 
 [dev-dependencies]
 rand = "0.8.5"
+
