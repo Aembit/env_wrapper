@@ -64,10 +64,12 @@
 pub(crate) mod test_helpers;
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     env::{self, VarError},
     ffi::{OsStr, OsString},
 };
+
+use regex::RegexSet;
 
 /// Represents a process's environment.
 pub trait Environment {
@@ -133,7 +135,7 @@ impl Environment for RealEnvironment {
     /// > This function may panic if `key` is empty, contains an ASCII equals sign `'='`
     /// > or the NUL character `'\0'`, or when `value` contains the NUL character.
     fn set_var(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
-        env::set_var(key, value)
+        unsafe { env::set_var(key, value) }
     }
 
     /// From [`std::env::var`](https://doc.rust-lang.org/std/env/fn.var.html):
@@ -193,7 +195,7 @@ impl Environment for RealEnvironment {
     /// > `'='` or the NUL character `'\0'`, or when the value contains the NUL
     /// > character.
     fn remove_var(&mut self, key: impl AsRef<OsStr>) {
-        env::remove_var(key)
+        unsafe { env::remove_var(key) }
     }
 }
 
@@ -271,6 +273,161 @@ impl Environment for FakeEnvironment {
     }
 }
 
+/// EnvVarSnapshot stores a copy of environment variables for later recall. The
+/// API provided by EnvVarSnapshot is meant to encourage use of environment
+/// variables as immutable after the process starts. The motivation is to
+/// avoid two classes of bugs associated with environment variables.
+///
+/// The first is that environment variables are not meant to change within the
+/// lifetime of a process except when preparing the environment before spawning
+/// new child process. Checking an environment variable at two different times
+/// is error prune due to time-of-get vs time-of-set issues. It is safest to
+/// avoid any part of our program getting the environment variables set by
+/// another part of the same program.
+///
+/// The second is that accessing environment variables can be fundamentally
+/// unsafe. This is particularly true in the presence of multiple threads. It
+/// is made worse by dependencies being able to spawn threads and set and get
+/// environment variables.
+///   * <https://rachelbythebay.com/w/2017/01/30/env/>
+///   * <https://www.geldata.com/blog/c-stdlib-isn-t-threadsafe-and-even-safe-rust-didn-t-save-us>
+///   * <https://www.evanjones.ca/setenv-is-not-thread-safe.html>
+///
+/// However, by snapshotting the environment as early as possible and only
+/// consulting the snapshot, we can avoid triggering most of these bugs.
+#[derive(Clone)]
+pub struct EnvVarSnapshot(#[doc(hidden)] BTreeMap<OsString, OsString>);
+
+pub fn as_anchored_pattern(s: &str) -> String {
+    format!(r#"\A{}\z"#, s)
+}
+
+impl EnvVarSnapshot {
+    /// Produces an empty snapshot. Mainly for test scenarios. Intended for testing scenarios.
+    pub fn empty() -> Self {
+        EnvVarSnapshot(BTreeMap::new())
+    }
+
+    /// Produces a snapshot of the named environment variables.
+    pub fn new(names: &[&str]) -> Self {
+        let mut storage = BTreeMap::new();
+        for name in names {
+            let key = OsString::from(name);
+            if let Some(val) = std::env::var_os(&key) {
+                storage.insert(key, val.clone());
+            }
+        }
+        EnvVarSnapshot(storage)
+    }
+
+    /// Produces a snapshot of the subset of the environment variables that match the given regex
+    /// set. Since regex matching does not match against OsString, this may miss non-UTF-8
+    /// variables that would otherwise match the regex.
+    pub fn new_from_patterns(patterns: &RegexSet) -> Self {
+        let mut storage = BTreeMap::new();
+        // Even though we will ignore variable names that cannot be converted to UTF-8, we need to
+        // rely on vars_os() here because vars() panics. See:
+        // https://doc.rust-lang.org/src/std/env.rs.html#157-165
+        Self::copy_matches(std::env::vars_os(), &mut storage, patterns);
+        EnvVarSnapshot(storage)
+    }
+
+    /// Produces a snapshot with all environment variables present at the time it was called.
+    pub fn all_vars() -> Self {
+        let mut storage = BTreeMap::new();
+        for (name, value) in std::env::vars_os() {
+            storage.insert(name.clone(), value.clone());
+        }
+        EnvVarSnapshot(storage)
+    }
+
+    /// Produces a snapshot with the given variables and values. Intended for testing scenarios.
+    pub fn new_with_values<'a>(
+        pairs: impl IntoIterator<Item = &'a (impl AsRef<OsStr> + 'a, impl AsRef<OsStr> + 'a)>,
+    ) -> Self {
+        let mut storage = BTreeMap::new();
+        for (name, value) in pairs {
+            storage.insert(name.into(), value.into());
+        }
+        EnvVarSnapshot(storage)
+    }
+
+    /// Returns an iterator of variable name and value pairs for all variables that were present at
+    /// the time the snapshot was taken.
+    pub fn present(&self) -> impl Iterator<Item = (String, String)> {
+        self.0.iter().filter_map(|(key, value)| {
+            match (key.clone().into_string(), value.clone().into_string()) {
+                (Ok(k), Ok(v)) => Some((k, v)),
+                _ => None,
+            }
+        })
+    }
+
+    /// Produces a new snapshot containing a subset of the environment variables in this snapshot
+    /// that match the given regex set.
+    pub fn subset_from_patterns(&self, patterns: &RegexSet) -> Self {
+        let mut storage = BTreeMap::new();
+        Self::copy_matches(self.0.iter(), &mut storage, patterns);
+        EnvVarSnapshot(storage)
+    }
+
+    fn copy_matches(
+        src: impl Iterator<Item = (impl AsRef<OsStr>, impl AsRef<OsStr>)>,
+        dst: &mut BTreeMap<OsString, OsString>,
+        patterns: &RegexSet,
+    ) {
+        for (os_name, os_value) in src {
+            if let Some(name) = os_name.as_ref().to_str() {
+                if patterns.is_match(&name) {
+                    dst.insert(
+                        os_name.as_ref().to_os_string(),
+                        os_value.as_ref().to_os_string(),
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl Environment for EnvVarSnapshot {
+    /// Provided for conformance with the Environment trait but always panics because
+    /// EnvVarSnapshot should be considered immutable.
+    fn set_var(&mut self, _key: impl AsRef<OsStr>, _value: impl AsRef<OsStr>) {
+        panic!("Do not call EnvVarSnapshot::set_var");
+    }
+
+    /// Get an environment variable, checking for valid UTF-8. If valid UTF-8
+    /// checks are not needed, use `var_os`.
+    ///
+    /// # Errors
+    /// * If a key doesn't exist, it should return a `VarError::NotPresent`.
+    /// * If the environment variable value contains invalid UTF-8, it
+    /// should return `VarError::NotUnicode(OsString)`.
+    fn var(&self, key: impl AsRef<OsStr>) -> Result<String, VarError> {
+        let Some(os_val) = self.0.get(key.as_ref()) else {
+            return Err(VarError::NotPresent);
+        };
+
+        let recoded = os_val
+            .clone()
+            .into_string()
+            .map_err(|os| VarError::NotUnicode(os))?;
+        Ok(recoded)
+    }
+
+    /// Get an environment variable. This does not check for valid UTF-8.
+    /// If a valid UTF-8 check is needed, use `var` instead.
+    fn var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
+        self.0.get(key.as_ref()).cloned()
+    }
+
+    /// Provided for conformance with the Environment trait but always panics because
+    /// EnvVarSnapshot should be considered immutable.
+    fn remove_var(&mut self, _key: impl AsRef<OsStr>) {
+        panic!("Do not call EnvVarSnapshot::remove_var");
+    }
+}
+
 // These tests represent behavior that should be shared by fake and real
 // implementations. Both are being tested to enforce behavioral parity.
 #[cfg(test)]
@@ -281,7 +438,11 @@ mod tests {
         os::unix::ffi::OsStrExt,
     };
 
-    use crate::{test_helpers::random_upper, Environment, FakeEnvironment, RealEnvironment};
+    use regex::RegexSet;
+
+    use crate::{
+        test_helpers::random_upper, EnvVarSnapshot, Environment, FakeEnvironment, RealEnvironment,
+    };
 
     const INVALID_UTF8: [u8; 4] = [0x66, 0x6f, 0x80, 0x6f];
 
@@ -301,6 +462,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        // EnvVarSnapshot intentionally omitted
     }
 
     #[test]
@@ -318,6 +480,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        test(EnvVarSnapshot::empty());
     }
 
     #[test]
@@ -337,6 +500,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        // EnvVarSnapshot intentionally omitted
     }
 
     #[test]
@@ -357,6 +521,20 @@ mod tests {
     }
 
     #[test]
+    fn when_using_var_getter_with_an_invalid_utf8_value_in_snapshot_then_it_is_a_not_unicode_error()
+    {
+        // Arrange
+        let key = OsString::from(random_upper());
+        let env = EnvVarSnapshot::new_with_values(&[(&key, OsStr::from_bytes(&INVALID_UTF8))]);
+
+        // Act
+        let result = env.var(&key);
+
+        // Assert
+        assert!(matches!(result, Err(VarError::NotUnicode(_))));
+    }
+
+    #[test]
     fn given_a_nonexistent_env_var_when_getting_the_env_var_with_var_os_then_it_is_none() {
         fn test(env: impl Environment) {
             // Arrange
@@ -370,6 +548,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        test(EnvVarSnapshot::empty());
     }
 
     #[test]
@@ -390,6 +569,20 @@ mod tests {
     }
 
     #[test]
+    fn given_an_env_var_with_invalid_utf8_in_snapshot_when_getting_the_env_var_with_var_os_then_it_is_some(
+    ) {
+        // Arrange
+        let key = OsString::from(random_upper());
+        let env = EnvVarSnapshot::new_with_values(&[(&key, OsStr::from_bytes(&INVALID_UTF8))]);
+
+        // Act
+        let result = env.var_os(&key);
+
+        // Assert
+        assert!(result.is_some());
+    }
+
+    #[test]
     fn given_an_existing_environment_variable_when_setting_the_same_environment_variable_then_the_value_is_overwritten(
     ) {
         fn test(mut env: impl Environment) {
@@ -407,6 +600,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        // EnvVarSnapshot intentionally omitted
     }
 
     #[test]
@@ -426,6 +620,7 @@ mod tests {
         }
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        // EnvVarSnapshot intentionally omitted
     }
 
     #[test]
@@ -442,5 +637,66 @@ mod tests {
 
         test(RealEnvironment);
         test(FakeEnvironment::new());
+        // EnvVarSnapshot intentionally omitted
+    }
+
+    #[test]
+    fn given_a_snapshot_of_a_cargo_env_var_it_is_present() {
+        let env = EnvVarSnapshot::new(&["CARGO_PKG_VERSION"]);
+        assert!(env.var("CARGO_PKG_VERSION").is_ok());
+    }
+
+    #[test]
+    fn given_a_snapshot_of_all_vars_standard_cargo_envs_are_present() {
+        let env = EnvVarSnapshot::all_vars();
+        assert!(env.var("CARGO_PKG_VERSION").is_ok());
+        assert_eq!(
+            env.present()
+                .filter(|(name, _value)| { name == "CARGO_PKG_VERSION" })
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn given_a_snapshot_of_all_cargo_vars_they_are_each_available() {
+        let env = EnvVarSnapshot::new_from_patterns(&RegexSet::new(&["^CARGO_"]).unwrap());
+        assert_eq!(env.var("CARGO_PKG_VERSION").unwrap(), "0.2.0");
+        assert!(!env.var("CARGO_HOME").unwrap().is_empty());
+    }
+
+    #[test]
+    fn given_a_snapshot_a_disjoint_subset_does_not_contain_them() {
+        let env = EnvVarSnapshot::new_from_patterns(&RegexSet::new(&["^CARGO_"]).unwrap());
+        assert_eq!(env.var("CARGO_PKG_VERSION").unwrap(), "0.2.0");
+        let subset = env.subset_from_patterns(&RegexSet::new(&["NOT_"]).unwrap());
+        assert_eq!(
+            subset.var("CARGO_PKG_VERSION").unwrap_err(),
+            VarError::NotPresent
+        );
+    }
+
+    #[test]
+    fn given_an_empty_env_any_fetch_returns_err() {
+        let env = EnvVarSnapshot::empty();
+        assert!(env.var("anything").is_err());
+    }
+
+    #[test]
+    fn given_an_env_with_an_assigned_value_it_is_returned() {
+        let env = EnvVarSnapshot::new_with_values(&[(
+            &OsString::from("HOME"),
+            &OsString::from("/home/myuser"),
+        )]);
+        assert_eq!(env.var("HOME").unwrap(), "/home/myuser");
+    }
+
+    #[test]
+    fn given_an_env_snapshot_it_can_be_cloned() {
+        let env = EnvVarSnapshot::new_with_values(&[(
+            &OsString::from("HOME"),
+            &OsString::from("/home/myuser"),
+        )]);
+        let _ = env.clone();
     }
 }
