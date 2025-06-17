@@ -1,11 +1,12 @@
 #![cfg(test)]
 
-use rand::{distributions::Uniform, Rng};
+use rand::{distr::Uniform, Rng};
 
 /// Random 12-character uppercase text.
 pub fn random_upper() -> String {
-    let mut rng = rand::thread_rng();
-    let upper = Uniform::from(b'A'..=b'Z');
+    let mut rng = rand::rng();
+    let upper = Uniform::try_from(b'A'..=b'Z')
+        .expect("Failure to construct distribution over ASCII letters.");
     (0..11).map(|_| rng.sample(upper) as char).collect()
 }
 
