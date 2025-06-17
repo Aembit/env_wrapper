@@ -69,7 +69,9 @@ use std::{
     ffi::{OsStr, OsString},
 };
 
-/// Represents a process's environment.
+/// Represents a process's environment. It should be considered `unsafe` despite not being marked
+/// `unsafe`. This is because the `RealEnvironment` impl needs to call `unsafe` methods but the
+/// `FakeEnvironment` does not.
 pub trait Environment {
     /// Set an environment variable.
     fn set_var(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>);
@@ -133,7 +135,7 @@ impl Environment for RealEnvironment {
     /// > This function may panic if `key` is empty, contains an ASCII equals sign `'='`
     /// > or the NUL character `'\0'`, or when `value` contains the NUL character.
     fn set_var(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
-        env::set_var(key, value)
+        unsafe { env::set_var(key, value) }
     }
 
     /// From [`std::env::var`](https://doc.rust-lang.org/std/env/fn.var.html):
@@ -193,7 +195,7 @@ impl Environment for RealEnvironment {
     /// > `'='` or the NUL character `'\0'`, or when the value contains the NUL
     /// > character.
     fn remove_var(&mut self, key: impl AsRef<OsStr>) {
-        env::remove_var(key)
+        unsafe { env::remove_var(key) }
     }
 }
 
